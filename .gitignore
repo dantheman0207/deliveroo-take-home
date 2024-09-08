@@ -1,0 +1,6 @@
+# Ignore the coverage file
+coverage.out
+# Ignore the binary
+deliveroo-take-home
+# Ignore Visual Studio Code/Cursor settings
+.vscode
