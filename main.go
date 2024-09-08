@@ -62,7 +62,7 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 		if exitOnError {
-			os.Exit(4)
+			os.Exit(3)
 		}
 		return
 	}
