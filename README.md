@@ -2,8 +2,12 @@
 
 This project is a Go-based implementation of a cron expression parser. It expands cron expressions into a list of execution times. With `make coverage` you can see that there is 94.9% test coverage. You can use the command line tool like this:
 ```shell
-make 
+git clone https://github.com/dantheman0207/deliveroo-take-home.git
+cd deliveroo-take-home
+make
+./deliveroo-take-home "*/15" 0 1,15 "*" 1-5 /usr/bin/find
 ```
+I have adapted this from the requirements slightly to work on `zsh` as well as `bash`. This has been tested on macOS.
 
 ## Getting Started
 
@@ -14,26 +18,27 @@ make
 ### Installation
 
 1. Clone the repository:
-   ```shell
-   git clone https://github.com/dantheman0207/deliveroo-take-home.git
-   cd deliveroo-take-home
-   ```
+```shell
+git clone https://github.com/dantheman0207/deliveroo-take-home.git
+cd deliveroo-take-home
+```
 
 2. Install dependencies:
-   ```shell
-   make deps
-   ```
+```shell
+make deps
+```
 
 ## Usage
 
 This project includes a Makefile to simplify common development tasks. Here are the available commands:
-
 
 ### Run all default tasks
 
 To run tests and build the project:
 ```shell
 make all
+# Or just run
+make
 ```
 
 ### Build the project
