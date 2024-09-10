@@ -53,13 +53,6 @@ make build
 
 This will create an executable named `deliveroo-take-home` in the project root.
 
-### Run the project
-
-To build and run the project:
-```shell
-make run
-```
-
 ### Run tests
 
 To run all tests:
