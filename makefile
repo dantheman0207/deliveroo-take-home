@@ -10,7 +10,7 @@ COVERAGE_FILE=coverage.out
 # Main package path
 MAIN_PACKAGE=.
 
-.PHONY: all build clean test coverage run deps
+.PHONY: all build clean test coverage deps
 
 all: test build
 
@@ -28,10 +28,6 @@ test:
 coverage:
 	$(GOTEST) -coverprofile=$(COVERAGE_FILE) ./...
 	$(GOCMD) tool cover -html=$(COVERAGE_FILE)
-
-run:
-	$(GOBUILD) -o $(BINARY_NAME) -v $(MAIN_PACKAGE)
-	./$(BINARY_NAME)
 
 deps:
 	$(GOGET) ./...
