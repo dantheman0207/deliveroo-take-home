@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // CronField represents a single field in a cron expression.
@@ -23,6 +25,7 @@ type CronFields struct {
 	dayOfMonth CronField
 	month      CronField
 	dayOfWeek  CronField
+	year       CronField
 	command    string
 }
 
@@ -56,7 +59,7 @@ func main() {
 		dayOfMonth: CronField{label: "day of month", min: 1, max: 31},
 		month:      CronField{label: "month", min: 1, max: 12},
 		dayOfWeek:  CronField{label: "day of week", min: 0, max: 6},
-		command:    os.Args[6],
+		year:       CronField{label: "year", min: time.Now().Year(), max: time.Now().Year() + 80},
 	}
 	err := cronFields.expandCronFields(os.Args[1:])
 	if err != nil {
@@ -66,40 +69,58 @@ func main() {
 		}
 		return
 	}
+	if cronFields.year.value == "" {
+		cronFields.command = strings.Join(os.Args[6:], " ")
+	} else {
+		cronFields.command = strings.Join(os.Args[7:], " ")
+	}
 	cronFields.printCronFields()
 }
 
 func (c *CronFields) expandCronFields(args []string) error {
-	err := c.minute.expandCronField(args[0])
+	result, err := c.minute.expandCronField(args[0])
 	if err != nil {
 		return err
 	}
-	err = c.hour.expandCronField(args[1])
+	c.minute.value = result
+	result, err = c.hour.expandCronField(args[1])
 	if err != nil {
 		return err
 	}
-	err = c.dayOfMonth.expandCronField(args[2])
+	c.hour.value = result
+	result, err = c.dayOfMonth.expandCronField(args[2])
 	if err != nil {
 		return err
 	}
-	err = c.month.expandCronField(args[3])
+	c.dayOfMonth.value = result
+	result, err = c.month.expandCronField(args[3])
 	if err != nil {
 		return err
 	}
-	err = c.dayOfWeek.expandCronField(args[4])
+	c.month.value = result
+	result, err = c.dayOfWeek.expandCronField(args[4])
 	if err != nil {
 		return err
 	}
+	c.dayOfWeek.value = result
+	result, err = c.year.expandCronField(args[5])
+	if err == nil && result != "" {
+		c.year.value = result
+	}
+
 	return nil
 }
 
 func (c *CronFields) printCronFields() {
 	// Output the results
-	fmt.Printf("%-14s%s\n", "minute", c.minute.value)
-	fmt.Printf("%-14s%s\n", "hour", c.hour.value)
-	fmt.Printf("%-14s%s\n", "day of month", c.dayOfMonth.value)
-	fmt.Printf("%-14s%s\n", "month", c.month.value)
-	fmt.Printf("%-14s%s\n", "day of week", c.dayOfWeek.value)
+	fmt.Printf("%-14s%s\n", c.minute.label, c.minute.value)
+	fmt.Printf("%-14s%s\n", c.hour.label, c.hour.value)
+	fmt.Printf("%-14s%s\n", c.dayOfMonth.label, c.dayOfMonth.value)
+	fmt.Printf("%-14s%s\n", c.month.label, c.month.value)
+	fmt.Printf("%-14s%s\n", c.dayOfWeek.label, c.dayOfWeek.value)
+	if c.year.value != "" {
+		fmt.Printf("%-14s%s\n", c.year.label, c.year.value)
+	}
 	fmt.Printf("%-14s%s\n", "command", c.command)
 }
 
@@ -107,97 +128,118 @@ func (c *CronFields) printCronFields() {
 // It supports asterisks, commas, ranges, and steps.
 // It sets the value of the cron field to the expanded values.
 // It handles any error encountered.
-func (cf *CronField) expandCronField(field string) error {
+func (cf *CronField) expandCronField(field string) (string, error) {
+	var result string
+	var err error
 	switch {
 	case field == "*":
-		return cf.expandCronFieldAsterisk()
+		result, err = cf.expandCronFieldAsterisk()
+		if err != nil {
+			return "", err
+		}
 	case strings.Contains(field, ","):
-		return cf.expandCronFieldComma(field)
+		result, err = cf.expandCronFieldComma(field)
+		if err != nil {
+			return "", err
+		}
 	case strings.Contains(field, "-"):
-		return cf.expandCronFieldRange(field)
+		result, err = cf.expandCronFieldRange(field)
+		if err != nil {
+			return "", err
+		}
 	case strings.Contains(field, "/"):
-		return cf.expandCronFieldStep(field)
+		result, err = cf.expandCronFieldStep(field)
+		if err != nil {
+			return "", err
+		}
 	default:
 		num, err := strconv.Atoi(field)
 		if err != nil {
-			return fmt.Errorf("invalid input: %s", field)
+			return "", fmt.Errorf("invalid input: %s", field)
 		}
 		if num < cf.min || num > cf.max {
-			return fmt.Errorf("value out of range: %d", num)
+			return "", fmt.Errorf("value out of range: %d", num)
 		}
-		cf.value = strconv.Itoa(num)
-		return nil
+		result = strconv.Itoa(num)
 	}
+	return result, nil
 }
 
-func (cf *CronField) expandCronFieldAsterisk() error {
+func (cf *CronField) expandCronFieldAsterisk() (string, error) {
 	result := []int{}
 	for i := cf.min; i <= cf.max; i++ {
 		result = append(result, i)
 	}
-	cf.value = strings.Trim(fmt.Sprint(result), "[]")
-	return nil
+	resultString := strings.Trim(fmt.Sprint(result), "[]")
+	return resultString, nil
 }
 
-func (cf *CronField) expandCronFieldComma(field string) error {
+func (cf *CronField) expandCronFieldComma(field string) (string, error) {
 	result := []int{}
 	for _, v := range strings.Split(field, ",") {
-		num, err := strconv.Atoi(v)
+		nums, err := cf.expandCronField(v)
 		if err != nil {
-			return fmt.Errorf("invalid input: %s", v)
+			return "", err
 		}
-		if num < cf.min || num > cf.max {
-			return fmt.Errorf("value out of range: %d", num)
+		for _, v := range strings.Split(nums, " ") {
+			num, err := strconv.Atoi(v)
+			if err != nil {
+				return "", fmt.Errorf("invalid input: %s", v)
+			}
+			if num < cf.min || num > cf.max {
+				return "", fmt.Errorf("value out of range: %d", num)
+			}
+			result = append(result, num)
 		}
-		result = append(result, num)
 	}
-	cf.value = strings.Trim(fmt.Sprint(result), "[]")
-	return nil
+	sort.Ints(result)
+	resultString := strings.Trim(fmt.Sprint(result), "[]")
+	return resultString, nil
 }
 
-func (cf *CronField) expandCronFieldRange(field string) error {
+func (cf *CronField) expandCronFieldRange(field string) (string, error) {
 	parts := strings.Split(field, "-")
 	if len(parts) != 2 {
-		return fmt.Errorf("invalid range: %s", field)
+		return "", fmt.Errorf("invalid range: %s", field)
 	}
 	start, err := strconv.Atoi(parts[0])
 	if err != nil {
-		return fmt.Errorf("invalid start of range: %s", parts[0])
+		return "", fmt.Errorf("invalid start of range: %s", parts[0])
 	}
 	end, err := strconv.Atoi(parts[1])
 	if err != nil {
-		return fmt.Errorf("invalid end of range: %s", parts[1])
+		return "", fmt.Errorf("invalid end of range: %s", parts[1])
 	}
 	if start < cf.min || start > cf.max || end < cf.min || end > cf.max || start > end {
-		return fmt.Errorf("invalid range: %s", field)
+		return "", fmt.Errorf("invalid range: %s", field)
 	}
 	result := []int{}
 	for i := start; i <= end; i++ {
 		result = append(result, i)
 	}
-	cf.value = strings.Trim(fmt.Sprint(result), "[]")
-	return nil
+	resultString := strings.Trim(fmt.Sprint(result), "[]")
+	return resultString, nil
 }
 
-func (cf *CronField) expandCronFieldStep(field string) error {
+func (cf *CronField) expandCronFieldStep(field string) (string, error) {
 	parts := strings.Split(field, "/")
 	if len(parts) != 2 {
-		return fmt.Errorf("invalid step: %s", field)
+		return "", fmt.Errorf("invalid step: %s", field)
 	}
 	step, err := strconv.Atoi(parts[1])
 	if err != nil {
-		return fmt.Errorf("invalid step value: %s", parts[1])
+		return "", fmt.Errorf("invalid step value: %s", parts[1])
 	}
 	if step <= 0 {
-		return fmt.Errorf("step must be positive: %d", step)
+		return "", fmt.Errorf("step must be positive: %d", step)
 	}
 	if step > cf.max-cf.min {
-		return fmt.Errorf("step is larger than the range")
+		return "", fmt.Errorf("step is larger than the range")
 	}
 	result := []int{}
 	for i := cf.min; i <= cf.max; i += step {
 		result = append(result, i)
 	}
-	cf.value = strings.Trim(fmt.Sprint(result), "[]")
-	return nil
+	resultString := strings.Trim(fmt.Sprint(result), "[]")
+	return resultString, nil
 }
