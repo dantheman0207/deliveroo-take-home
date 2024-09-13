@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCLI(t *testing.T) {
@@ -60,9 +61,52 @@ command       /usr/bin/find
 `,
 		},
 		{
-			name:     "Test with invalid input",
-			args:     []string{"invalid", "0", "1", "1", "1", "/usr/bin/find"},
-			expected: "invalid input: invalid\n",
+			name: "Test with single year",
+			args: []string{"*/15", "0", "1,15", "*", "1-5", "2024", "/usr/bin/find"},
+			expected: `minute        0 15 30 45
+hour          0
+day of month  1 15
+month         1 2 3 4 5 6 7 8 9 10 11 12
+day of week   1 2 3 4 5
+year          2024
+command       /usr/bin/find
+`,
+		},
+		{
+			name: "Test with year range",
+			args: []string{"0", "0", "1", "1", "0", "2024-2030", "/usr/bin/find"},
+			expected: `minute        0
+hour          0
+day of month  1
+month         1
+day of week   0
+year          2024 2025 2026 2027 2028 2029 2030
+command       /usr/bin/find
+`,
+		},
+		{
+			name: "Test with year step",
+			args: []string{"0", "0", "1", "1", "0", "*/5", "/usr/bin/find"},
+			expected: `minute        0
+hour          0
+day of month  1
+month         1
+day of week   0
+year          2022 2027 2032 2037 2042 2047
+command       /usr/bin/find
+`,
+		},
+		{
+			name: "Test with year step with range",
+			args: []string{"0", "0", "1", "1", "0", "2025-2050/5", "/usr/bin/find"},
+			expected: `minute        0
+hour          0
+day of month  1
+month         1
+day of week   0
+year          2025 2030 2035 2040 2045 2050
+command       /usr/bin/find
+`,
 		},
 		// No arguments provided
 		{
@@ -132,9 +176,12 @@ func TestExpandCronField(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cf := CronField{min: tt.min, max: tt.max}
-			cf.expandCronField(tt.field)
-			if cf.value != tt.expected {
-				t.Errorf("Expected %v, got %v", tt.expected, cf.value)
+			result, err := cf.expandCronField(tt.field)
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+			if result != tt.expected {
+				t.Errorf("Expected %v, got %v", tt.expected, result)
 			}
 		})
 	}
@@ -163,7 +210,7 @@ func TestExpandCronFieldInvalidInput(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cf := CronField{min: tt.min, max: tt.max}
-			err := cf.expandCronField(tt.field)
+			_, err := cf.expandCronField(tt.field)
 			if err == nil {
 				t.Errorf("Expected error, got nil")
 				return
@@ -181,11 +228,11 @@ func TestExpandCronFieldsErrors(t *testing.T) {
 		args     []string
 		expected string
 	}{
-		{"Invalid step input for minute", []string{"*/60", "0", "1,15", "*", "1-5"}, "step is larger than the range"},
-		{"Invalid range input for day of week", []string{"*/15", "0", "1,15", "*", "1-30"}, "invalid range: 1-30"},
-		{"Invalid comma input for day of month", []string{"*/15", "0", "1,50", "*", "1-5"}, "value out of range: 50"},
-		{"Invalid input for month", []string{"*/15", "0", "1,15", "50", "1-5", "/usr/bin/find"}, "value out of range: 50"},
-		{"Invalid input for hour", []string{"*/15", "050", "1,15", "0", "1-5", "/usr/bin/find"}, "value out of range: 50"},
+		{"Invalid step input for minute", []string{"*/60", "0", "1,15", "*", "1-5", "*"}, "step is larger than the range"},
+		{"Invalid range input for day of week", []string{"*/15", "0", "1,15", "*", "1-30", "*"}, "invalid range: 1-30"},
+		{"Invalid comma input for day of month", []string{"*/15", "0", "1,50", "*", "1-5", "*"}, "value out of range: 50"},
+		{"Invalid input for month", []string{"*/15", "0", "1,15", "50", "1-5", "*", "/usr/bin/find"}, "value out of range: 50"},
+		{"Invalid input for hour", []string{"*/15", "050", "1,15", "0", "1-5", "*", "/usr/bin/find"}, "value out of range: 50"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -195,7 +242,7 @@ func TestExpandCronFieldsErrors(t *testing.T) {
 				dayOfMonth: CronField{label: "day of month", min: 1, max: 31},
 				month:      CronField{label: "month", min: 1, max: 12},
 				dayOfWeek:  CronField{label: "day of week", min: 0, max: 6},
-				command:    "/usr/bin/find",
+				year:       CronField{label: "year", min: time.Now().Year(), max: time.Now().Year() + 80},
 			}
 			err := cronFields.expandCronFields(tt.args)
 			if err == nil {

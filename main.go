@@ -53,13 +53,14 @@ func main() {
 	}
 
 	// Parse and expand each field
+	currentYear := time.Now().Year()
 	cronFields := CronFields{
 		minute:     CronField{label: "minute", min: 0, max: 59},
 		hour:       CronField{label: "hour", min: 0, max: 23},
 		dayOfMonth: CronField{label: "day of month", min: 1, max: 31},
 		month:      CronField{label: "month", min: 1, max: 12},
 		dayOfWeek:  CronField{label: "day of week", min: 0, max: 6},
-		year:       CronField{label: "year", min: time.Now().Year(), max: time.Now().Year() + 80},
+		year:       CronField{label: "year", min: currentYear - 2, max: currentYear + 25},
 	}
 	err := cronFields.expandCronFields(os.Args[1:])
 	if err != nil {
@@ -69,11 +70,11 @@ func main() {
 		}
 		return
 	}
-	if cronFields.year.value == "" {
-		cronFields.command = strings.Join(os.Args[6:], " ")
-	} else {
-		cronFields.command = strings.Join(os.Args[7:], " ")
+	commandIndex := 6
+	if cronFields.year.value != "" {
+		commandIndex = 7
 	}
+	cronFields.command = strings.Join(os.Args[commandIndex:], " ")
 	cronFields.printCronFields()
 }
 
@@ -142,13 +143,13 @@ func (cf *CronField) expandCronField(field string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-	case strings.Contains(field, "-"):
-		result, err = cf.expandCronFieldRange(field)
+	case strings.Contains(field, "/"):
+		result, err = cf.expandCronFieldStep(field)
 		if err != nil {
 			return "", err
 		}
-	case strings.Contains(field, "/"):
-		result, err = cf.expandCronFieldStep(field)
+	case strings.Contains(field, "-"):
+		result, err = cf.expandCronFieldRange(field)
 		if err != nil {
 			return "", err
 		}
@@ -232,6 +233,22 @@ func (cf *CronField) expandCronFieldStep(field string) (string, error) {
 	}
 	if step <= 0 {
 		return "", fmt.Errorf("step must be positive: %d", step)
+	}
+	if parts[0] != "*" { // handle step with range
+		parts = strings.Split(parts[0], "-")
+		if len(parts) != 2 {
+			return "", fmt.Errorf("invalid range for step base: %s", parts[0])
+		}
+		start, err := strconv.Atoi(parts[0])
+		if err != nil {
+			return "", fmt.Errorf("invalid start of step range: %s", parts[0])
+		}
+		cf.min = start
+		end, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return "", fmt.Errorf("invalid end of step range: %s", parts[1])
+		}
+		cf.max = end
 	}
 	if step > cf.max-cf.min {
 		return "", fmt.Errorf("step is larger than the range")
